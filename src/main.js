@@ -8,13 +8,15 @@ const { scene, camera, renderer } = initScene();
 const { player, boss, leftArm, rightArm } = createEntities(scene);
 const uiElements = initUI();
 
-// 2. ✨ 신규: 게임 상태 머신 (START, PLAYING, GAMEOVER, VICTORY)
+// 2. ✨ 게임 상태 머신 (Phase 2 변수 추가)
 const gameState = {
   status: 'START', 
   playerHealth: 20,
-  bossHealth: 10000,
-  maxBossHealth: 10000,
-  isParryCooldown: false
+  bossHealth: 100, // 테스트용 체력 100
+  maxBossHealth: 100,
+  isParryCooldown: false,
+  isPhaseTwo: false,       // 2페이즈 돌입 여부
+  phaseTwoStarted: false   // 패턴 가속 실행 여부
 };
 
 const keys = { a: false, d: false };
@@ -31,43 +33,57 @@ let rightArmTargetX = 0;
 const warnings = []; 
 const projectiles = [];
 
-// --- [✨ 신규: 게임 리셋(재시작) 함수] ---
+// --- [✨ 패턴 타이머 관리] ---
+let warningTimer;
+let projectileTimer;
+
+function startPatterns(warningInterval, projInterval) {
+  clearInterval(warningTimer);
+  clearInterval(projectileTimer);
+  warningTimer = setInterval(spawnWarning, warningInterval);
+  projectileTimer = setInterval(spawnProjectile, projInterval);
+}
+
+// 초기 시작은 1페이즈 속도!
+startPatterns(3000, 800);
+
+// --- [게임 리셋(재시작) 함수] ---
 function resetGame() {
   gameState.playerHealth = 20;
-  gameState.bossHealth = 10000;
+  gameState.bossHealth = 100;
   gameState.isParryCooldown = false;
   
-  player.position.set(0, 1.5, 5); // 플레이어 원위치
+  // 2페이즈 초기화
+  gameState.isPhaseTwo = false;
+  gameState.phaseTwoStarted = false;
+  
+  player.position.set(0, 1.5, 5); 
   player.material.color.setHex(0xFFD700);
   
-  boss.material.color.setHex(0x333333);
+  boss.material.color.setHex(0x333333); // 보스 색상 원래대로
   leftArmTargetX = 0; rightArmTargetX = 0; 
   leftArm.rotation.x = 0; rightArm.rotation.x = 0; 
   
   comboString = ""; 
   keys.a = false; keys.d = false;
 
-  // 화면에 남은 장판과 탄막 싹 지우기
   warnings.forEach(w => scene.remove(w.mesh));
   warnings.length = 0;
   projectiles.forEach(p => scene.remove(p));
   projectiles.length = 0;
 
+  startPatterns(3000, 800); // 패턴 속도 1페이즈로 원상복구
   gameState.status = 'PLAYING';
 }
 
 // --- [키보드 입력 제어] ---
 window.addEventListener('keydown', (event) => {
-  // ✨ 신규: 스페이스바를 눌렀을 때 화면이 밑으로 내려가는 브라우저 기본 동작 차단!
   if (event.code === 'Space') {
     event.preventDefault(); 
   }
 
-  // ✨ 상태 화면 키 입력 처리 (시작 & 리스타트 및 전체화면)
   if (gameState.status === 'START' && event.key === 'Enter') {
     gameState.status = 'PLAYING';
-    
-    // ✨ 신규: Enter를 누르는 순간 전체화면(Fullscreen)으로 전환!
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
         console.log(`전체화면 전환 에러: ${err.message}`);
@@ -81,7 +97,6 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
-  // 게임 중이 아닐 때는 아래의 조작키 무시
   if (gameState.status !== 'PLAYING') return;
 
   if (event.key === 'a' || event.key === 'A') keys.a = true;
@@ -143,8 +158,11 @@ function handleAttack(key) {
     setTimeout(() => scene.remove(effect), 100); 
 
     gameState.bossHealth -= damage;
+    
+    // 타격 시 번쩍임 (2페이즈면 붉은색으로 복구, 1페이즈면 짙은 회색으로 복구)
     boss.material.color.setHex(0xffffff); 
-    setTimeout(() => boss.material.color.setHex(0x333333), 100); 
+    const baseColor = gameState.isPhaseTwo ? 0x8b0000 : 0x333333;
+    setTimeout(() => boss.material.color.setHex(baseColor), 100); 
   }
 
   if (comboString !== "") {
@@ -152,21 +170,23 @@ function handleAttack(key) {
   }
 }
 
-// --- [패턴 생성기 (✨상태 체크 추가)] ---
+// --- [패턴 생성기] ---
 function spawnWarning() {
-  if (gameState.status !== 'PLAYING') return; // 게임 중이 아니면 패턴 생성 안함
+  if (gameState.status !== 'PLAYING') return; 
   const warnGeo = new THREE.PlaneGeometry(6, 6);
   const warnMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
   const warningMesh = new THREE.Mesh(warnGeo, warnMat);
   warningMesh.rotation.x = -Math.PI / 2;
   warningMesh.position.set(player.position.x, 0.01, 2); 
   scene.add(warningMesh);
-  warnings.push({ mesh: warningMesh, startTime: Date.now(), duration: 1500 });
+  
+  // ✨ 2페이즈 돌입 시 장판 터지는 시간이 절반으로 짧아짐!
+  const duration = gameState.isPhaseTwo ? 800 : 1500;
+  warnings.push({ mesh: warningMesh, startTime: Date.now(), duration: duration });
 }
-setInterval(spawnWarning, 3000);
 
 function spawnProjectile() {
-  if (gameState.status !== 'PLAYING') return; // 게임 중이 아니면 탄막 생성 안함
+  if (gameState.status !== 'PLAYING') return; 
   const projGeo = new THREE.SphereGeometry(0.8);
   const projMat = new THREE.MeshBasicMaterial({ color: 0xff4500 }); 
   const projectile = new THREE.Mesh(projGeo, projMat);
@@ -175,22 +195,47 @@ function spawnProjectile() {
   scene.add(projectile);
   projectiles.push(projectile);
 }
-setInterval(spawnProjectile, 800);
 
 // --- [메인 애니메이션 루프] ---
 function animate() {
   requestAnimationFrame(animate);
 
-  // ✨ UI 화면 항상 업데이트
   updateHUD(uiElements, gameState);
 
-  // ✨ 게임 중이 아닐 때는 여기서 루프 차단 (오브젝트 멈춤)
   if (gameState.status !== 'PLAYING') {
     renderer.render(scene, camera);
     return; 
   }
 
-  // --- [여기서부터는 PLAYING 상태일 때만 실행됨] ---
+  // --- [✨ 2페이즈 광폭화 감지 및 연출] ---
+  if (gameState.bossHealth <= gameState.maxBossHealth / 2 && !gameState.isPhaseTwo) {
+    gameState.isPhaseTwo = true;
+    console.log("🔥 보스 2페이즈 돌입! 광폭화!!");
+    
+    // 1. 보스 색상이 시뻘겋게 변함
+    boss.material.color.setHex(0x8b0000); 
+    
+    // 2. 화면 흔들림(카메라 쉐이크) 연출
+    let shakeCount = 0;
+    const shakeInterval = setInterval(() => {
+      camera.position.x = (Math.random() - 0.5) * 1.5;
+      camera.position.y = 5 + (Math.random() - 0.5) * 1.5;
+      shakeCount++;
+      if (shakeCount > 20) { 
+        clearInterval(shakeInterval);
+        camera.position.set(0, 5, 40); // 1초 뒤 카메라 원위치
+      }
+    }, 50);
+  }
+
+  // 3. 2페이즈 패턴 가속 발동
+  if (gameState.isPhaseTwo && !gameState.phaseTwoStarted) {
+    gameState.phaseTwoStarted = true;
+    console.log("⚡ 패턴 가속 발동! (장판 1.5초, 탄막 0.3초 간격)");
+    startPatterns(1500, 300); // 1.5초마다 장판, 0.3초마다 탄막 폭격!
+  }
+  // ----------------------------------------
+
   if (keys.a) player.position.x -= moveSpeed;
   if (keys.d) player.position.x += moveSpeed;
   player.position.x = Math.max(-moveLimit, Math.min(moveLimit, player.position.x));
@@ -206,9 +251,11 @@ function animate() {
       const isHit = Math.abs(player.position.x - w.mesh.position.x) < 3.75;
       if (isHit) {
         if (isParrying) { 
-          gameState.bossHealth -= 100; 
+          // ⚠️ 테스트를 위해 패링 데미지를 100 -> 25로 낮춤 (2페이즈를 보기 위함)
+          gameState.bossHealth -= 25; 
           boss.material.color.setHex(0x00ff00); 
-          setTimeout(() => boss.material.color.setHex(0x333333), 200);
+          const baseColor = gameState.isPhaseTwo ? 0x8b0000 : 0x333333;
+          setTimeout(() => boss.material.color.setHex(baseColor), 200);
         } else {
           gameState.playerHealth -= 5;
           player.material.color.setHex(0xff0000); 
@@ -248,11 +295,9 @@ function animate() {
     }
   }
 
-  // 팔 회전 보간
   leftArm.rotation.x += (leftArmTargetX - leftArm.rotation.x) * 0.2;
   rightArm.rotation.x += (rightArmTargetX - rightArm.rotation.x) * 0.2;
 
-  // ✨ 승패 판정 로직
   if (gameState.playerHealth <= 0) {
     gameState.playerHealth = 0;
     gameState.status = 'GAMEOVER';
