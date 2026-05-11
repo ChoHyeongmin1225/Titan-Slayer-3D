@@ -1,0 +1,11 @@
+Model Information:
+* title:	Knight
+* source:	https://sketchfab.com/3d-models/knight-bcfd53f247cb46e8aa79337bbe590a50
+* author:	Richard.Yu (https://sketchfab.com/Richard.Yu)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Knight" (https://sketchfab.com/3d-models/knight-bcfd53f247cb46e8aa79337bbe590a50) by Richard.Yu (https://sketchfab.com/Richard.Yu) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

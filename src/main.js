@@ -60,9 +60,15 @@ function resetGame() {
   player.position.set(0, 1.5, 5); 
   player.material.color.setHex(0xFFD700);
   
-  boss.material.color.setHex(0x333333); // 보스 색상 원래대로
+  boss.material.color.setHex(0x333333); // 보스(히트박스) 색상 원래대로
   leftArmTargetX = 0; rightArmTargetX = 0; 
   leftArm.rotation.x = 0; rightArm.rotation.x = 0; 
+
+  // ✨ 핵심: 다시 1페이즈 보스 모델로 되돌리기!
+  if (boss.userData.model1 && boss.userData.model2) {
+    boss.userData.model1.visible = true;  // 1페이즈 나타남
+    boss.userData.model2.visible = false; // 2페이즈 숨음
+  }
   
   comboString = ""; 
   keys.a = false; keys.d = false;
@@ -159,7 +165,7 @@ function handleAttack(key) {
 
     gameState.bossHealth -= damage;
     
-    // 타격 시 번쩍임 (2페이즈면 붉은색으로 복구, 1페이즈면 짙은 회색으로 복구)
+    // 타격 시 번쩍임 (히트박스/큐브 렌더링용)
     boss.material.color.setHex(0xffffff); 
     const baseColor = gameState.isPhaseTwo ? 0x8b0000 : 0x333333;
     setTimeout(() => boss.material.color.setHex(baseColor), 100); 
@@ -180,7 +186,7 @@ function spawnWarning() {
   warningMesh.position.set(player.position.x, 0.01, 2); 
   scene.add(warningMesh);
   
-  // ✨ 2페이즈 돌입 시 장판 터지는 시간이 절반으로 짧아짐!
+  // 2페이즈 돌입 시 장판 터지는 시간이 절반으로 짧아짐!
   const duration = gameState.isPhaseTwo ? 800 : 1500;
   warnings.push({ mesh: warningMesh, startTime: Date.now(), duration: duration });
 }
@@ -210,12 +216,18 @@ function animate() {
   // --- [✨ 2페이즈 광폭화 감지 및 연출] ---
   if (gameState.bossHealth <= gameState.maxBossHealth / 2 && !gameState.isPhaseTwo) {
     gameState.isPhaseTwo = true;
-    console.log("🔥 보스 2페이즈 돌입! 광폭화!!");
+    console.log("🔥 보스 2페이즈 돌입! 외형 교체 및 광폭화!!");
     
-    // 1. 보스 색상이 시뻘겋게 변함
-    boss.material.color.setHex(0x8b0000); 
+    // ✨ 핵심: 1페이즈 모델 숨기고 2페이즈 모델 표시!
+    if (boss.userData.model1 && boss.userData.model2) {
+      boss.userData.model1.visible = false;
+      boss.userData.model2.visible = true;
+    } else {
+      // 3D 모델이 아직 로드되지 않은 상태라면 기존처럼 큐브 색상만 붉게 변경
+      boss.material.color.setHex(0x8b0000); 
+    }
     
-    // 2. 화면 흔들림(카메라 쉐이크) 연출
+    // 화면 흔들림(카메라 쉐이크) 연출
     let shakeCount = 0;
     const shakeInterval = setInterval(() => {
       camera.position.x = (Math.random() - 0.5) * 1.5;
@@ -228,7 +240,7 @@ function animate() {
     }, 50);
   }
 
-  // 3. 2페이즈 패턴 가속 발동
+  // 2페이즈 패턴 가속 발동
   if (gameState.isPhaseTwo && !gameState.phaseTwoStarted) {
     gameState.phaseTwoStarted = true;
     console.log("⚡ 패턴 가속 발동! (장판 1.5초, 탄막 0.3초 간격)");
