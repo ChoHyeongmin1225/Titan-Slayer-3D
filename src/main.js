@@ -57,7 +57,7 @@ function resetGame() {
   gameState.isPhaseTwo = false;
   gameState.phaseTwoStarted = false;
   
-  player.position.set(0, 1.5, 5); 
+  player.position.set(0, 1.5, 25); 
   player.material.color.setHex(0xFFD700);
   
   boss.material.color.setHex(0x333333); 
@@ -223,7 +223,7 @@ function spawnWarning() {
   const warnMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
   const warningMesh = new THREE.Mesh(warnGeo, warnMat);
   warningMesh.rotation.x = -Math.PI / 2;
-  warningMesh.position.set(player.position.x, 0.01, 2); 
+  warningMesh.position.set(player.position.x, 0.01, player.position.z); 
   scene.add(warningMesh);
   
   const duration = gameState.isPhaseTwo ? 800 : 1500;
@@ -425,7 +425,7 @@ function animate() {
     }
     embers.geometry.attributes.position.needsUpdate = true;
   }
-  
+
   composer.render();
 }
 
