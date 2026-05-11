@@ -4,118 +4,85 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 export function createEntities(scene) {
   const loader = new GLTFLoader();
 
-  // 1. 바닥
+  // --- [✨ 1. 절망의 돌바닥: 절차적 텍스처 생성] ---
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#222'; ctx.fillRect(0, 0, 512, 512);
+  // 무작위 균열 그리기
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+  for(let i=0; i<50; i++) {
+    ctx.beginPath();
+    ctx.moveTo(Math.random()*512, Math.random()*512);
+    ctx.lineTo(Math.random()*512, Math.random()*512);
+    ctx.stroke();
+  }
+  const floorTex = new THREE.CanvasTexture(canvas);
+  floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+  floorTex.repeat.set(10, 5);
+
   const groundGeo = new THREE.PlaneGeometry(100, 30);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x4a4f54, roughness: 0.9, metalness: 0.1 });
+  const groundMat = new THREE.MeshStandardMaterial({ 
+    map: floorTex, 
+    roughness: 0.8, 
+    metalness: 0.2,
+    color: 0x444444
+  });
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true; 
   scene.add(ground);
 
-  // --- [2. 보스 히트박스 및 모델 로드] ---
-  const bossGeo = new THREE.BoxGeometry(10, 15, 5);
-  const bossMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }); // 히트박스 숨김
-  const boss = new THREE.Mesh(bossGeo, bossMat);
+  // --- [✨ 2. 지옥의 불씨 (Embers) 파티클] ---
+  const emberCount = 200;
+  const emberGeo = new THREE.BufferGeometry();
+  const emberPositions = new Float32Array(emberCount * 3);
+  for (let i = 0; i < emberCount; i++) {
+    emberPositions[i * 3] = (Math.random() - 0.5) * 60; // X
+    emberPositions[i * 3 + 1] = Math.random() * 20;    // Y
+    emberPositions[i * 3 + 2] = (Math.random() - 0.5) * 30; // Z
+  }
+  emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
+  const emberMat = new THREE.PointsMaterial({
+    color: 0xffaa00,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending // 빛나게 처리
+  });
+  const embers = new THREE.Points(emberGeo, emberMat);
+  scene.add(embers);
+
+  // --- [3. 보스 & 플레이어 로직 (기존과 동일)] ---
+  const boss = new THREE.Mesh(new THREE.BoxGeometry(10, 15, 5), new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }));
   boss.position.set(0, 7.5, -5); 
   scene.add(boss);
+  boss.userData.model1 = null; boss.userData.model2 = null;
 
-  boss.userData.model1 = null;
-  boss.userData.model2 = null;
-
-  // 👿 [새 모델] 1페이즈 보스 로드 (6SxKo - Pixel Knight)
+  // 보스 1, 2 모델 로드 (생략 - 기존 코드 유지)
   loader.load('/boss1/scene.gltf', (gltf) => {
-    const bossModel1 = gltf.scene;
-    
-    // 🔧 1페이즈 스케일 튜닝: 이 모델은 기본 크기가 적당해서 약간만 키웁니다.
-    bossModel1.scale.set(1.5, 1.5, 1.5); 
-    // 발바닥을 히트박스 바닥(y=0)에 맞춥니다.
-    bossModel1.position.set(0, -7.5, 0); 
-
-    bossModel1.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    boss.add(bossModel1);
-    boss.userData.model1 = bossModel1; 
-    console.log("1페이즈 로우폴리 보스 로드 완료!");
+    const m = gltf.scene; m.scale.set(1.5, 1.5, 1.5); m.position.set(0, -7.5, 0);
+    m.traverse(c => { if(c.isMesh) { c.castShadow = c.receiveShadow = true; } });
+    boss.add(m); boss.userData.model1 = m;
   });
-
-  // 💀 [새 모델] 2페이즈 보스 로드 (6VGs7 - Low Poly Demon)
   loader.load('/boss2/scene.gltf', (gltf) => {
-    const bossModel2 = gltf.scene;
-    
-    // 🔧 2페이즈 스케일 튜닝 (핵심!): 이 모델은 기본 크기가 엄청나게 큽니다!!
-    // 이전 코드처럼 5배로 키우면 은하계만해집니다. 0.05배 정도로 대폭 줄여야 합니다.
-    bossModel2.scale.set(0.05, 0.05, 0.05); 
-    
-    // 이 악마 모델은 피벗(중심)이 발바닥에 있지 않아서 y위치를 더 세심하게 잡아줘야 합니다.
-    // 일단 화면에 보이게 적당히 내립니다. 나중에 발바닥이 땅에 닿게 수정할 겁니다.
-    bossModel2.position.set(0, -7.5, 0); 
-    
-    bossModel2.visible = false; // 처음엔 숨김
-    
-    bossModel2.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-    boss.add(bossModel2);
-    boss.userData.model2 = bossModel2; 
-    console.log("2페이즈 거대 악마 로드 완료! (크기 대폭 축소됨)");
+    const m = gltf.scene; m.scale.set(0.05, 0.05, 0.05); m.position.set(0, -7.5, 0); m.visible = false;
+    m.traverse(c => { if(c.isMesh) { c.castShadow = c.receiveShadow = true; } });
+    boss.add(m); boss.userData.model2 = m;
   });
 
-  // 보스 양팔 (투명 히트박스)
-  const armGeo = new THREE.BoxGeometry(3, 14, 4);
-  armGeo.translate(0, -7, 0); 
-  const armMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 });
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(3, 14, 4).translate(0,-7,0), new THREE.MeshStandardMaterial({transparent:true, opacity:0}));
+  leftArm.position.set(-6.5, 7.5, 0); boss.add(leftArm);
+  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(3, 14, 4).translate(0,-7,0), new THREE.MeshStandardMaterial({transparent:true, opacity:0}));
+  rightArm.position.set(6.5, 7.5, 0); boss.add(rightArm);
 
-  const leftArm = new THREE.Mesh(armGeo, armMat);
-  leftArm.position.set(-6.5, 7.5, 0); 
-  boss.add(leftArm); 
-
-  const rightArm = new THREE.Mesh(armGeo, armMat);
-  rightArm.position.set(6.5, 7.5, 0); 
-  boss.add(rightArm);
-
-  // --- [3. 플레이어 로드 (아르토리우스 킵)] ---
-  const playerGeo = new THREE.BoxGeometry(1.5, 3, 1.5);
-  const playerMat = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 }); 
-  const player = new THREE.Mesh(playerGeo, playerMat);
-  player.position.set(0, 1.5, 5); 
-  scene.add(player);
-
+  const player = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3, 1.5), new THREE.MeshStandardMaterial({transparent:true, opacity:0}));
+  player.position.set(0, 1.5, 5); scene.add(player);
   loader.load('/player/scene.gltf', (gltf) => {
-    const model = gltf.scene;
-    model.scale.set(1.5, 1.5, 1.5); 
-    model.position.set(0, -1.5, 0);
-    model.rotation.y = Math.PI;
-
-    model.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.userData.originalColor = child.material.color.getHex();
-      }
-    });
-    player.add(model);
+    const m = gltf.scene; m.scale.set(1.5, 1.5, 1.5); m.position.set(0, -1.5, 0); m.rotation.y = Math.PI;
+    m.traverse(c => { if(c.isMesh) { c.castShadow = c.receiveShadow = true; c.userData.originalColor = c.material.color.getHex(); } });
+    player.add(m);
   });
 
-  const originalSetHex = player.material.color.setHex.bind(player.material.color);
-  player.material.color.setHex = (hex) => {
-    originalSetHex(hex);
-    player.traverse((child) => {
-      if (child.isMesh && child.userData.originalColor !== undefined) {
-        if (hex === 0x6a7b8c || hex === 0xFFD700) {
-          child.material.color.setHex(child.userData.originalColor);
-        } else {
-          child.material.color.setHex(hex);
-        }
-      }
-    });
-  };
-
-  return { player, boss, leftArm, rightArm };
+  return { player, boss, leftArm, rightArm, embers }; // ✨ embers 추가 반환
 }

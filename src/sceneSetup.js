@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-// ✨ 블룸 효과를 위한 포스트 프로세싱 모듈들 수입!
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -7,60 +6,55 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 export function initScene() {
   const scene = new THREE.Scene();
   
-  // 잿빛 하늘과 황량한 안개
-  const skyColor = 0x5a636e; 
-  scene.background = new THREE.Color(skyColor);
-  scene.fog = new THREE.Fog(skyColor, 30, 80); 
+  // 1. 배경: 완전한 어둠에서 -> 약간의 달빛이 스며든 짙은 청회색으로 밝게 조절
+  const bgColor = 0x1a1c24; 
+  scene.background = new THREE.Color(bgColor);
+  // 안개도 조금 더 옅어지게, 멀리서부터 끼도록 조절
+  scene.fog = new THREE.Fog(bgColor, 25, 100); 
 
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 5, 40); 
   camera.lookAt(0, 5, 0);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio); 
   renderer.setSize(window.innerWidth, window.innerHeight);
-  
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
-  
-  // ✨ 빛 번짐을 더 자연스럽게 만들어주는 톤 매핑 설정
   renderer.toneMapping = THREE.ReinhardToneMapping;
+  // ✨ 신규: 화면 전체의 노출(밝기)을 끌어올림! (기본값 1.0 -> 1.5)
+  renderer.toneMappingExposure = 1.5; 
   document.querySelector('#app').appendChild(renderer.domElement);
 
-  const ambientLight = new THREE.AmbientLight(0x8899a6, 1.5); 
+  // 2. 조명: 전체적으로 빛의 세기(Intensity)를 대폭 상승
+  // 주변광 (그림자 진 곳도 어느 정도 보이게 만들어줌)
+  const ambientLight = new THREE.AmbientLight(0x707a8a, 2.0); 
   scene.add(ambientLight);
   
-  const directionalLight = new THREE.DirectionalLight(0xeef5ff, 2.5); 
-  directionalLight.position.set(20, 40, 20); 
-  directionalLight.castShadow = true; 
-  
-  directionalLight.shadow.mapSize.width = 2048;
-  directionalLight.shadow.mapSize.height = 2048;
-  directionalLight.shadow.camera.near = 0.5;
-  directionalLight.shadow.camera.far = 100;
-  directionalLight.shadow.camera.left = -30;
-  directionalLight.shadow.camera.right = 30;
-  directionalLight.shadow.camera.top = 30;
-  directionalLight.shadow.camera.bottom = -30;
-  scene.add(directionalLight);
+  // 주 조명 (달빛/창백한 빛 - 강도 1.5 -> 3.0 증가)
+  const dirLight = new THREE.DirectionalLight(0xaaccff, 3.0);
+  dirLight.position.set(10, 50, 10);
+  dirLight.castShadow = true;
+  scene.add(dirLight);
 
-  // --- [✨ 블룸(Bloom) 포스트 프로세싱 세팅] ---
+  // 지옥의 불길 조명 (바닥 아래에서 올라오는 붉은 광원 - 주황빛 섞고 강도 증가)
+  const lavaLight = new THREE.PointLight(0xff4400, 20, 120);
+  lavaLight.position.set(0, -10, 0);
+  scene.add(lavaLight);
+
+  // 3. 포스트 프로세싱 (Bloom)
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
 
-  // UnrealBloomPass(해상도, 빛 강도, 반경, 임계값)
-  // 임계값(Threshold)을 0.5로 두어 어두운 갑옷은 빛나지 않고, 원색의 밝은 이펙트만 빛나게 설정
-  const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.2, 0.5, 0.5);
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
   composer.addPass(bloomPass);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight); // 필터 사이즈도 같이 리사이즈
+    composer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // 이제 renderer 대신 composer도 같이 내보냅니다.
   return { scene, camera, renderer, composer };
 }

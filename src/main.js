@@ -5,7 +5,7 @@ import { initUI, updateHUD } from './ui.js';
 
 // 1. 모듈 불러오기
 const { scene, camera, renderer, composer } = initScene();
-const { player, boss, leftArm, rightArm } = createEntities(scene);
+const { player, boss, leftArm, rightArm, embers } = createEntities(scene);
 const uiElements = initUI();
 
 // 2. 게임 상태 머신
@@ -416,6 +416,16 @@ function animate() {
     gameState.status = 'VICTORY';
   }
 
+  if (embers) {
+    const positions = embers.geometry.attributes.position.array;
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i + 1] += 0.05; // 위로 상승
+      positions[i] += Math.sin(Date.now() * 0.001 + i) * 0.01; // 좌우 흔들림
+      if (positions[i + 1] > 20) positions[i + 1] = 0; // 천장에 닿으면 바닥으로
+    }
+    embers.geometry.attributes.position.needsUpdate = true;
+  }
+  
   composer.render();
 }
 
